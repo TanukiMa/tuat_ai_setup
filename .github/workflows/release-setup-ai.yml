@@ -16,9 +16,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build setup_ai.exe
+      - name: Build setup_ai.exe (static CRT)
         shell: pwsh
-        run: cargo build --release --locked
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
 
       - name: Collect setup_ai.exe
         shell: pwsh
@@ -29,7 +31,7 @@ jobs:
           $outputDir = Join-Path $workspace 'dist'
           New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
-          $sourcePath = Join-Path $workspace 'target\release\setup_ai.exe'
+          $sourcePath = Join-Path $workspace 'target\x86_64-pc-windows-msvc\release\setup_ai.exe'
           $targetPath = Join-Path $outputDir 'setup_ai.exe'
 
           if (-not (Test-Path $sourcePath)) {

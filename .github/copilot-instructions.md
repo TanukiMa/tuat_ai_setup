@@ -20,3 +20,4 @@ There is no automated test suite or lint configuration in this repository.
 - Keep all `lms` operations routed through the shared command runner (`invoke_lms`).
 - Keep model detection normalization (`normalize_token` + `test_model_installed`) so `lms ls` formatting differences do not break detection.
 - Maintain idempotent behavior: reruns should skip already-installed LM Studio/models when possible.
+- Keep CI release binaries portable by static-linking the MSVC runtime (`RUSTFLAGS=-C target-feature=+crt-static` in workflow).
