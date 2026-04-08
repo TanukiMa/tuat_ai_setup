@@ -1,0 +1,94 @@
+name: Build and release setup_ai.exe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build setup_ai.exe with IExpress
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $workspace = (Get-Location).Path
+          $outputDir = Join-Path $workspace 'dist'
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+
+          $batPath = Join-Path $workspace 'setup_ai.bat'
+          if (-not (Test-Path $batPath)) {
+            throw "setup_ai.bat was not found: $batPath"
+          }
+
+          $targetPath = Join-Path $outputDir 'setup_ai.exe'
+          $sedPath = Join-Path $env:RUNNER_TEMP 'setup_ai.sed'
+
+          $sedContent = @"
+[Version]
+Class=IEXPRESS
+SEDVersion=3
+[Options]
+PackagePurpose=InstallApp
+ShowInstallProgramWindow=1
+HideExtractAnimation=1
+UseLongFileName=1
+InsideCompressed=0
+CAB_FixedSize=0
+CAB_ResvCodeSigning=0
+RebootMode=N
+InstallPrompt=
+DisplayLicense=
+FinishMessage=
+TargetName="$targetPath"
+FriendlyName="setup_ai"
+AppLaunched="setup_ai.bat"
+PostInstallCmd=<None>
+AdminQuietInstCmd=
+UserQuietInstCmd=
+SourceFiles=SourceFiles
+[SourceFiles]
+SourceFiles0="$workspace"
+[SourceFiles0]
+%FILE0%=
+[Strings]
+FILE0="setup_ai.bat"
+"@
+
+          Set-Content -LiteralPath $sedPath -Value $sedContent -Encoding Ascii
+
+          $iexpress = Join-Path $env:SystemRoot 'System32\iexpress.exe'
+          & $iexpress /N $sedPath
+          if ($LASTEXITCODE -ne 0) {
+            throw "IExpress failed with exit code $LASTEXITCODE"
+          }
+
+          $deadline = (Get-Date).AddMinutes(2)
+          while ((-not (Test-Path $targetPath)) -and ((Get-Date) -lt $deadline)) {
+            Start-Sleep -Seconds 2
+          }
+
+          if (-not (Test-Path $targetPath)) {
+            throw "setup_ai.exe was not generated."
+          }
+
+      - name: Compute release metadata
+        id: meta
+        shell: pwsh
+        run: |
+          $tag = "setup-ai-${{ github.run_id }}-${{ github.run_attempt }}"
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "release_name=setup_ai $tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Create release and upload setup_ai.exe
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.release_name }}
+          files: dist/setup_ai.exe
